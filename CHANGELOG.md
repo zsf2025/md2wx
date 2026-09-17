@@ -1,6 +1,14 @@
-# Changelog
+﻿# Changelog
 
 本文件记录用户可感知的变化。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
+
+## [1.0.4] - 2026-09-17
+
+### 修复
+- **图片宽度溢出**：marked 默认输出的 `<img>` 无任何宽度约束，原图超过正文宽度（677px）时预览与粘贴后都会横向溢出。新增 `renderer.image()` 钩子，输出内联 `max-width: 100%; height: auto;`（只缩不放、等比缩放）；预览侧补 `.wx-article img` CSS；粘贴侧 `copySafe()` 联动 `height: auto` 防变形
+
+### 新增
+- 测试：`test_renderer.js` +1（图片内联宽度断言）、`test_copysafe.js` +1（height:auto 联动断言）
 
 ## [1.0.3] - 2026-09-17
 
@@ -44,3 +52,4 @@
 - Markdown → 微信公众号富文本转换模板（全部行内样式 + 双重白名单）
 - 支持标题、行内样式、列表（含任务列表）、代码高亮 + 行号、表格、引用、图片、分割线、脚注、原始 HTML 白名单过滤
 - `scripts/build_wx_page.py` 一键构建可复制页面；`scripts/test_renderer.js` 渲染回归（DOM 桩）
+

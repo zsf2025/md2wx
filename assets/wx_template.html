@@ -33,6 +33,7 @@ pre.code-snippet code::before { counter-increment: line; content: counter(line);
 .code-snippet__comment { color: #a0a1a7; font-style: italic; }
 .code-snippet__function, .code-snippet__title { color: #4078f2; }
 .wx-article table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }
+.wx-article img { max-width: 100%; height: auto; }
 .wx-article th, .wx-article td { border: 1px solid #d9d9d9; padding: 8px; }
 .wx-article th { background-color: #f8f8f8; font-weight: bold; }
 </style>
@@ -214,6 +215,13 @@ const customRenderer = {
     return `<h${level} style="${style}">${text}</h${level}>`;
   },
   paragraph(text) { return `<p style="${S.p}">${text}</p>`; },
+  image(href, title, text) {
+    // 必须内联 max-width:100% + height:auto：marked 默认输出的 <img> 无任何宽度约束，
+    // 原图尺寸超过正文宽度（公众号正文 677px）时预览与粘贴后都会横向溢出。
+    // max-width 只缩不放：小图保持原尺寸。height:auto 保证被压宽时等比缩放。
+    const t = title ? ` title="${title}"` : '';
+    return `<img src="${href}" alt="${text || ''}"${t} style="max-width: 100%; height: auto;">`;
+  },
   checkbox(checked) {
     // 任务列表勾选态：公众号不认 <input>，且属性白名单会剥离 type/checked/disabled，
     // 直接把状态渲染成文本符号，保证粘贴后已完成/未完成可辨。
@@ -333,9 +341,10 @@ function copySafe() {
     if (cell.tagName === 'TH') { cell.style.backgroundColor = '#f8f8f8'; cell.style.fontWeight = 'bold'; }
   });
 
-  // D. 图片样式
+  // D. 图片样式（max-width 只缩不放；height:auto 与 max-width 联动保证等比缩放不变形）
   clone.querySelectorAll('img').forEach(img => {
     img.style.maxWidth = '100%';
+    img.style.height = 'auto';
     img.style.display = 'block';
     img.style.margin = '10px auto';
     img.style.borderRadius = '4px';

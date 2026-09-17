@@ -131,6 +131,7 @@ const checks = [
   ['表格强制左对齐断行', has('word-break: break-all') && has('border-collapse: collapse')],
   // 图片 / 分割线
   ['图片 max-width 内联', has('max-width: 100%')],
+  ['图片 height:auto 等比联动', has('height: auto')],
   // 分割线：jsdom 会把 border 简写展开成长属性，浏览器则保留简写，故只断言结构性特征
   ['分割线样式内联', /border[^;]*solid/.test(hr ? hr.style.cssText : '') && /#e0e0e0/.test(toHex(hr ? hr.style.cssText : ''))],
   // 行内代码
