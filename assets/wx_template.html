@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Markdown 转 公众号 (md2wx)</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<style>
+:root { --primary: #07c160; --bg: #f5f5f7; }
+* { box-sizing: border-box; }
+body { margin: 0; padding: 0; font-family: -apple-system, sans-serif; height: 100vh; display: flex; flex-direction: column; background: var(--bg); }
+header { background: #fff; height: 60px; border-bottom: 1px solid #e0e0e0; display: flex; align-items: center; justify-content: space-between; padding: 0 24px; z-index: 10; }
+.logo { font-weight: 700; font-size: 18px; color: #333; }
+.btn { border: none; padding: 9px 18px; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 600; margin-left: 10px; }
+.btn-copy { background: var(--primary); color: white; }
+.btn-clear { background: #fff; border: 1px solid #ddd; color: #555; }
+.main-layout { flex: 1; display: flex; overflow: hidden; }
+.editor-pane { flex: 1; border-right: 1px solid #e0e0e0; background: #fff; display: flex; flex-direction: column; }
+textarea#editor { flex: 1; border: none; resize: none; padding: 24px; font-family: 'Consolas', monospace; font-size: 15px; line-height: 1.6; outline: none; }
+.preview-pane { flex: 1; background: #f9f9f9; overflow-y: auto; padding: 24px; }
+#output-container { max-width: 677px; margin: 0 auto; background: #fff; padding: 40px 20px; min-height: 100%; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+.wx-article { font-size: 16px; line-height: 1.75; color: #333; }
+code:not(pre code) { padding: .2em .4em; margin: 0; font-size: 85%; white-space: break-spaces; background-color: #818b981f; border-radius: 6px; }
+pre.code-snippet { background: #f8f8f8; border-radius: 4px; border: 1px solid #e0e0e0; margin: 0; padding: 10px 0; overflow-x: auto; font-family: Menlo, Monaco, Consolas, monospace; font-size: 13px; line-height: 1.6; counter-reset: line; }
+/* 行号栏宽度由 --lnw 变量给出（render() 按最高行号位数逐块设置），默认 20px 即旧的固定值。
+   padding-left 用 calc 联动，保证行号栏与正文之间恒有 21px 空隙；位数增长时不会裁字/压正文。 */
+pre.code-snippet code { display: block; padding-left: calc(var(--lnw, 20px) + 30px); min-width: 100%; width: max-content; position: relative; white-space: pre; color: #333; }
+pre.code-snippet code::before { counter-increment: line; content: counter(line); position: absolute; left: 0; top: 0; width: var(--lnw, 20px); text-align: right; color: #bbb; border-right: 1px solid #ddd; padding-right: 8px; user-select: none; height: 100%; }
+.code-snippet__keyword, .code-snippet__selector-tag { color: #a626a4; font-weight: bold; }
+.code-snippet__string { color: #50a14f; }
+.code-snippet__number { color: #986801; }
+.code-snippet__comment { color: #a0a1a7; font-style: italic; }
+.code-snippet__function, .code-snippet__title { color: #4078f2; }
+.wx-article table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }
+.wx-article th, .wx-article td { border: 1px solid #d9d9d9; padding: 8px; }
+.wx-article th { background-color: #f8f8f8; font-weight: bold; }
+</style>
+</head>
+<body>
+<header>
+  <div class="logo"><span style="color:var(--primary)">❖</span> md2wx · Markdown 转公众号</div>
+  <div class="actions">
+    <button class="btn btn-clear" onclick="clearEditor()">清空</button>
+    <button class="btn btn-copy" onclick="copySafe()">复制到公众号</button>
+  </div>
+</header>
+<div class="main-layout">
+  <div class="editor-pane"><textarea id="editor" placeholder="在此输入 Markdown..."></textarea></div>
+  <div class="preview-pane"><div id="output-container"><div id="output" class="wx-article"></div></div></div>
+</div>
+<script>
+const editor = document.getElementById('editor');
+const output = document.getElementById('output');
+
+// 初始 Markdown 内容由 build 脚本注入（JSON 编码，避免转义问题）
+const initialContent = __MARKDOWN_JSON__;
+
+// 1. 内联样式常量（公众号只认行内样式）
+const S = {
+  h1: "font-size: 22px; font-weight: bold; border-bottom: 2px solid #07c160; padding-bottom: 10px; margin: 30px 0 20px 0; color: #333;",
+  p: "font-size: 16px; margin: 10px 0; line-height: 1.75; color: #333;",
+  list_item: "display: flex; align-items: flex-start; margin-bottom: 8px; line-height: 1.75; color: #333; font-size: 16px;",
+  // 标记符宽度不再写死：旧实现固定 15px，"10." 实测 24.09px、"100." 33.53px 都会溢出盒子压到正文
+  // （正文左边缘被盖住 5.09px / 14.53px）。宽度改由 list() 按本组最大编号位数注入，见 markerWidth()。
+  list_marker: "display: inline-block; margin-right: 4px; font-weight: bold; color: #07c160; white-space: nowrap; text-align: right;",
+  // 注意：绝不能加 text-align: justify / text-justify: inter-ideograph / word-break: break-all。
+  // 公众号编辑器中，列表正文后若还有行内内容（图片、hr 等），该文本行不是"最后一行"，
+  // justify 会把整行字符均匀拉开到满宽（用户截图 "3. 有 序 项…" 的现象）。break-all 还会把英文词拆散。
+  list_content: "flex: 1; min-width: 0; overflow-wrap: break-word; word-break: normal;"
+};
+
+// 1.5 渲染期动态哨兵
+// 旧实现用固定字符串 %%M%% 作列表标记占位符，正文里出现同名文本就会被替换成 •（含行内 code 内部），
+// 属静默内容损坏。改为每次渲染生成随机哨兵，并保证不与本次输入内容冲突。
+const FN_TOKENS = new Map(); // 脚注 label -> 哨兵
+let TOK = { li: '@@md2wx_li_init@@', task: '@@md2wx_task_init@@' };
+
+function makeToken(source, kind) {
+  let t;
+  do { t = '@@md2wx_' + kind + '_' + Math.random().toString(36).slice(2, 10) + '@@'; }
+  while (source.includes(t));
+  return t;
+}
+function initTokens(source) {
+  FN_TOKENS.clear();
+  // w = 标记符宽度槽位。用动态哨兵而非固定占位串，避免正文里的同名文本被替换（旧 %%M%% 缺陷的同类风险）
+  TOK = { li: makeToken(source, 'li'), task: makeToken(source, 'task'), w: makeToken(source, 'w') };
+}
+function footnoteToken(source, label) {
+  if (!FN_TOKENS.has(label)) FN_TOKENS.set(label, makeToken(source, 'fn'));
+  return FN_TOKENS.get(label);
+}
+function escapeRegExp(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+
+// 1.55 序号栏宽度：位数增长时最容易被忽略的一环（固定宽度既会裁字，也会压到内容）
+// 列表标记符：实测粗体 16px 下每位约 0.59em、句点约 0.33em；取 0.62em/位 + 0.45em，留 ~10% 余量，
+// 以兼容公众号端替换字体后字宽变化。
+function markerWidth(maxLabel) {
+  const digits = String(Math.max(maxLabel, 1)).length;
+  return (digits * 0.62 + 0.45).toFixed(2) + 'em';
+}
+// 代码行号栏：13px 等宽字体每位约 7px，取 8px/位 + 4px 余量；2 位数以内维持 20px 的原有视觉基准。
+// padLeft = box + 30 保证行号栏（含 8px 内边距与 1px 右边框）到代码正文恒有 21px 空隙。
+function lnGutter(maxLines) {
+  const digits = String(Math.max(maxLines, 1)).length;
+  const box = Math.max(20, digits * 8 + 4);
+  return { box: box, padLeft: box + 30 };
+}
+
+// 1.6 脚注预处理
+// marked 会把 `[^x]: 内容` 当作「引用式链接定义」消费掉：定义行整行消失、正文 [^x] 变成 URL 编码
+// 乱码链接。这里在解析前把定义抽出来、把引用换成哨兵，解析后再回填为上标 + 文末参考区。
+function replaceOutsideInlineCode(line, cb) {
+  const parts = line.split('`');
+  let inCode = false, out = '';
+  for (let i = 0; i < parts.length; i++) {
+    if (i > 0) { out += '`'; inCode = !inCode; }
+    out += inCode ? parts[i] : parts[i].replace(/\[\^([^\]\s]+)\]/g, cb);
+  }
+  return out;
+}
+function preprocessFootnotes(md) {
+  const lines = md.split('\n');
+  const defs = [], kept = [], protectedLine = [];
+  let fence = null;
+  for (const line of lines) {
+    const fenceMark = line.match(/^\s{0,3}(`{3,}|~{3,})/);
+    if (fenceMark) {
+      const ch = fenceMark[1][0];
+      if (!fence) fence = ch; else if (ch === fence) fence = null;
+      kept.push(line); protectedLine.push(true); continue;
+    }
+    const inCode = !!fence || /^( {4,}|\t)/.test(line);
+    if (!inCode) {
+      const def = line.match(/^\[\^([^\]\s]+)\]:[ \t]*(.*)$/);
+      if (def) {
+        const hit = defs.find(d => d.label === def[1]);
+        if (hit) hit.text += hit.text ? ' ' + def[2] : def[2];
+        else defs.push({ label: def[1], text: def[2] });
+        kept.push(''); protectedLine.push(true); continue;
+      }
+    }
+    kept.push(line); protectedLine.push(inCode);
+  }
+  if (!defs.length) return { md, defs };
+  const body = kept.map((line, i) => protectedLine[i] ? line : replaceOutsideInlineCode(
+    line, (m, label) => defs.some(d => d.label === label) ? footnoteToken(md, label) : m
+  )).join('\n');
+  return { md: body, defs };
+}
+function applyFootnotes(html, defs) {
+  if (!defs.length || !FN_TOKENS.size) return html;
+  const order = [];
+  FN_TOKENS.forEach((tok, label) => order.push(label));
+  const listed = order.concat(defs.filter(d => !FN_TOKENS.has(d.label)).map(d => d.label));
+  const numOf = new Map(listed.map((l, i) => [l, i + 1]));
+  let out = html;
+  FN_TOKENS.forEach((tok, label) => {
+    out = out.split(tok).join(`<sup style="font-size: 75%; color: #07c160; font-weight: bold;">[${numOf.get(label)}]</sup>`);
+  });
+  const refWidth = markerWidth(listed.length);  // 参考区序号同样按位数自适应，保证正文左边缘对齐
+  const items = listed.map(label => {
+    const d = defs.find(x => x.label === label);
+    let text = d ? d.text : '';
+    try { text = marked.parseInline(text); } catch (e) { /* 解析失败则保留原文 */ }
+    return `<section style="display: flex; align-items: flex-start; margin-bottom: 6px; font-size: 14px; line-height: 1.7; color: #666;">`
+      + `<span style="display: inline-block; width: ${refWidth}; text-align: right; color: #07c160; font-weight: bold;">${numOf.get(label)}.</span>`
+      + `<span style="flex: 1; min-width: 0; word-break: break-all;">${text}</span></section>`;
+  }).join('');
+  return out
+    + `<section style="margin-top: 30px; padding-top: 14px; border-top: 1px solid #e0e0e0;">`
+    + `<p style="font-size: 14px; font-weight: bold; color: #888; margin: 0 0 10px 0;">参考</p>${items}</section>`;
+}
+
+// 2. 代码块按行切分：空格转 &nbsp; 防止公众号吞掉缩进，并维持标签配对
+function splitHtmlIntoLines(html) {
+  if (!html) return [];
+  const regex = /<\/?[\w-]+[^>]*>|\n/g;
+  const lines = [];
+  let currentLine = "";
+  const tagStack = [];
+  let lastIndex = 0;
+  let match;
+  while ((match = regex.exec(html)) !== null) {
+    let textPart = html.substring(lastIndex, match.index);
+    if (textPart) { textPart = textPart.replace(/ /g, '\u00A0'); currentLine += textPart; }
+    const part = match[0];
+    if (part === '\n') {
+      let closeTags = "";
+      for (let i = tagStack.length - 1; i >= 0; i--) closeTags += `</${tagStack[i].tagName}>`;
+      lines.push(currentLine + closeTags);
+      let openTags = "";
+      for (let i = 0; i < tagStack.length; i++) openTags += tagStack[i].fullTag;
+      currentLine = openTags;
+    } else if (part.startsWith('</')) { currentLine += part; tagStack.pop(); }
+    else if (part.startsWith('<') && !part.endsWith('/>')) {
+      currentLine += part;
+      const m = part.match(/<([\w-]+)/);
+      if (m) tagStack.push({ tagName: m[1], fullTag: part });
+    } else { currentLine += part; }
+    lastIndex = regex.lastIndex;
+  }
+  let tail = html.substring(lastIndex);
+  if (tail) { tail = tail.replace(/ /g, '\u00A0'); currentLine += tail; }
+  if (currentLine) lines.push(currentLine);
+  return lines;
+}
+
+// 3. 自定义 Renderer：所有样式内联
+const customRenderer = {
+  heading(text, level) {
+    const style = level === 1 ? S.h1 : "font-weight:bold; margin: 20px 0 10px; font-size: 16px; color: #333;";
+    return `<h${level} style="${style}">${text}</h${level}>`;
+  },
+  paragraph(text) { return `<p style="${S.p}">${text}</p>`; },
+  checkbox(checked) {
+    // 任务列表勾选态：公众号不认 <input>，且属性白名单会剥离 type/checked/disabled，
+    // 直接把状态渲染成文本符号，保证粘贴后已完成/未完成可辨。
+    return checked
+      ? '<span style="color: #07c160; font-weight: bold; margin-right: 2px;">☑</span>'
+      : '<span style="color: #bfbfbf; font-weight: bold; margin-right: 2px;">☐</span>';
+  },
+  listitem(text, task) {
+    let content = text;
+    if (content.includes('<p style="')) content = content.replace(/margin:\s*10px 0;/g, 'margin: 0;');
+    const marker = task ? TOK.task : TOK.li;
+    // TOK.w 是宽度槽位，由 list() 在知道本组最大编号后统一回填
+    return `<section style="${S.list_item}"><span style="${S.list_marker}${TOK.w}">${marker}</span><span style="${S.list_content}">${content}</span></section>`;
+  },
+  list(body, ordered, start) {
+    let idx = start || 1;
+    // 先按本组剩余项数算出最大编号，再回填统一的标记符宽度：
+    // 同一列表内宽度一致 -> 正文左边缘对齐；宽度随位数增长 -> 编号不再溢出压到正文。
+    // 必须在编号替换之前回填，否则 TOK.w 会被一并当作列表项计数。
+    const count = (body.match(new RegExp(escapeRegExp(TOK.li), 'g')) || []).length;
+    const widthCss = 'width: ' + markerWidth((start || 1) + Math.max(count, 1) - 1) + ';';
+    // 任务列表项不占用编号/圆点，避免与 ☑/☐ 重复
+    const finalBody = body.split(TOK.w).join(widthCss)
+      .split(TOK.task).join('')
+      .replace(new RegExp(escapeRegExp(TOK.li), 'g'), () => ordered ? `${idx++}.` : '•');
+    return `<section style="margin: 10px 0; padding: 0; margin-left: 10px;">${finalBody}</section>`;
+  },
+  blockquote(quote) {
+    return `<blockquote style="margin: 16px 0; padding: 14px 16px; background-color: #f7f7f7; border-left: 4px solid #07c160; color: #666; border-radius: 4px;">${quote}</blockquote>`;
+  },
+  code(code, infostring) {
+    const langName = infostring || 'plaintext';
+    let highlightedHtml;
+    try {
+      const validLang = hljs.getLanguage(langName) ? langName : 'plaintext';
+      highlightedHtml = hljs.highlight(code, { language: validLang }).value;
+    } catch (e) { highlightedHtml = code; }
+    if (highlightedHtml.includes('class="hljs-')) {
+      highlightedHtml = highlightedHtml.replace(/class="hljs-/g, 'class="code-snippet__');
+    }
+    const lines = splitHtmlIntoLines(highlightedHtml);
+    let codeInner = "";
+    lines.forEach(line => {
+      const content = line.length === 0 ? '<br>' : line;
+      codeInner += `<code><span leaf="">${content}</span></code>`;
+    });
+    return `<section class="code-snippet__js"><pre class="code-snippet__js code-snippet code-snippet_nowrap" data-lang="${langName || 'text'}">${codeInner}</pre></section>`;
+  }
+};
+marked.use({ renderer: customRenderer, gfm: true, breaks: true });
+
+// 4. 复制前的样式修正（行内化 + 白名单），保证粘贴进公众号编辑器样式不丢
+function copySafe() {
+  const clone = output.cloneNode(true);
+  clone.style.position = 'absolute';
+  clone.style.left = '-9999px';
+  clone.style.width = '600px';
+  clone.style.background = '#fff';
+  document.body.appendChild(clone);
+
+  // A. 代码块容器样式
+  clone.querySelectorAll('pre.code-snippet').forEach(pre => {
+    // --lnw 只是预览侧的 CSS 计数器宽度变量，粘贴到公众号无意义，清掉避免脏样式
+    pre.style.removeProperty('--lnw');
+    pre.style.background = '#f8f8f8';
+    pre.style.borderRadius = '4px';
+    pre.style.border = '1px solid #e0e0e0';
+    pre.style.padding = '10px 0';
+    pre.style.marginBottom = '15px';
+    pre.style.fontFamily = "Menlo, Monaco, Consolas, monospace";
+    pre.style.fontSize = '13px';
+    pre.style.lineHeight = '1.6';
+    pre.style.display = 'block';
+    pre.style.whiteSpace = 'pre';
+    pre.style.overflowX = 'auto';
+  });
+
+  // B. 真实行号（CSS counter 在粘贴后会失效，改为 DOM 元素）
+  clone.querySelectorAll('pre.code-snippet code').forEach(code => {
+    const siblings = Array.from(code.parentElement.children).filter(c => c.tagName === 'CODE');
+    const lineIndex = siblings.indexOf(code) + 1;
+    // 行号栏宽度按本块最高行号位数计算，并与预览侧用同一个 lnGutter，保证「预览 = 粘贴」
+    const g = lnGutter(siblings.length);
+    code.style.display = 'block';
+    code.style.paddingLeft = g.padLeft + 'px';
+    code.style.position = 'relative';
+    code.style.whiteSpace = 'pre';
+    code.style.minWidth = '100%';
+    const numSpan = document.createElement('span');
+    // 用 textContent 而非 innerText：设置纯文本不需要布局，且在无布局环境（如 jsdom）下同样可靠
+    numSpan.textContent = String(lineIndex);
+    numSpan.style.position = 'absolute';
+    numSpan.style.left = '0';
+    numSpan.style.top = '0';
+    numSpan.style.width = g.box + 'px';
+    numSpan.style.textAlign = 'right';
+    numSpan.style.color = '#bbb';
+    numSpan.style.borderRight = '1px solid #ddd';
+    numSpan.style.paddingRight = '8px';
+    numSpan.style.height = '100%';
+    numSpan.style.userSelect = 'none';
+    numSpan.style.lineHeight = 'inherit';
+    code.prepend(numSpan);
+  });
+
+  // C. 表格样式（强制左对齐 + 断行，修复等距拉伸问题）
+  clone.querySelectorAll('table').forEach(table => {
+    table.style.borderCollapse = 'collapse';
+    table.style.width = '100%';
+    table.style.marginBottom = '20px';
+  });
+  clone.querySelectorAll('th, td').forEach(cell => {
+    cell.style.border = '1px solid #d9d9d9';
+    cell.style.padding = '8px';
+    cell.style.textAlign = 'left';
+    cell.style.wordBreak = 'break-all';
+    if (cell.tagName === 'TH') { cell.style.backgroundColor = '#f8f8f8'; cell.style.fontWeight = 'bold'; }
+  });
+
+  // D. 图片样式
+  clone.querySelectorAll('img').forEach(img => {
+    img.style.maxWidth = '100%';
+    img.style.display = 'block';
+    img.style.margin = '10px auto';
+    img.style.borderRadius = '4px';
+  });
+  // 外链图片提醒：公众号编辑器会拦截非素材库域名（mmbiz.qpic.cn / mp.weixin.qq.com）的图片，
+  // 粘贴后显示为一块占位空白（表现为"文本之间出现大间隔"），此行为在平台侧，代码无法绕过。
+  const wxImgHosts = ['mmbiz.qpic.cn', 'mp.weixin.qq.com'];
+  const extImgs = Array.from(clone.querySelectorAll('img'))
+    .map(img => img.getAttribute('src') || '')
+    .filter(src => src && !wxImgHosts.some(h => src.includes(h)));
+  if (extImgs.length) {
+    console.warn('[md2wx] 检测到 ' + extImgs.length + ' 张外链图片，粘贴到公众号后会被拦截显示为占位空白，请先上传到公众号素材库：\n' + extImgs.join('\n'));
+  }
+
+  // E. 行内代码样式
+  clone.querySelectorAll('code').forEach(c => {
+    if (c.closest('pre')) return;
+    c.style.padding = '.2em .4em';
+    c.style.fontSize = '85%';
+    c.style.whiteSpace = 'break-spaces';
+    c.style.backgroundColor = '#818b981f';
+    c.style.borderRadius = '6px';
+    c.style.fontFamily = "Menlo, Monaco, Consolas, monospace";
+  });
+
+  // F. 分割线样式
+  clone.querySelectorAll('hr').forEach(hr => {
+    hr.style.border = 'none';
+    hr.style.borderTop = '1px solid #e0e0e0';
+    hr.style.margin = '24px 0';
+  });
+
+  // G. 标签白名单
+  // 此前只过滤属性、不过滤标签，<details>/<meter>/<progress> 等会原样进入剪贴板，最终由公众号
+  // 编辑器二次过滤，结果不可控。规则：危险标签连内容一起移除；其余未知标签「拆壳」保留内容。
+  const allowedTags = ['section', 'span', 'p', 'div', 'br', 'hr', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+    'strong', 'b', 'em', 'i', 'u', 's', 'del', 'strike', 'ins', 'mark', 'small', 'sup', 'sub',
+    'kbd', 'abbr', 'time', 'cite', 'q', 'dfn', 'var', 'samp', 'code', 'pre', 'blockquote',
+    'figure', 'figcaption', 'ul', 'ol', 'li', 'dl', 'dt', 'dd',
+    'table', 'thead', 'tbody', 'tfoot', 'tr', 'th', 'td', 'caption', 'img', 'a'];
+  // 连内容一起丢弃的标签：内容属于代码/媒体而非用户可见文字
+  const dropTags = ['script', 'style', 'iframe', 'object', 'embed', 'noscript', 'template', 'svg',
+    'math', 'canvas', 'video', 'audio', 'source', 'track', 'picture', 'input', 'textarea', 'select',
+    'option', 'button', 'link', 'meta', 'base', 'param'];
+  // 其余未知标签（details/summary/meter/progress/marquee/applet/frame...）拆壳保留内容
+  Array.from(clone.querySelectorAll('*')).reverse().forEach(el => {
+    const tag = el.tagName.toLowerCase();
+    if (allowedTags.includes(tag)) return;
+    const parent = el.parentNode;
+    if (!parent) return;
+    if (dropTags.includes(tag)) { parent.removeChild(el); return; }
+    while (el.firstChild) parent.insertBefore(el.firstChild, el);
+    parent.removeChild(el);
+  });
+
+  // H. 属性白名单（公众号会剔除不认识的属性）
+  const allowedAttrs = ['style', 'src', 'href', 'width', 'height', 'leaf', 'class', 'data-lang', 'rowspan', 'colspan', 'type', 'checked', 'disabled'];
+  clone.querySelectorAll('*').forEach(el => {
+    Array.from(el.attributes).forEach(attr => {
+      if (!allowedAttrs.includes(attr.name)) el.removeAttribute(attr.name);
+    });
+  });
+
+  const selection = window.getSelection();
+  const range = document.createRange();
+  range.selectNodeContents(clone);
+  selection.removeAllRanges();
+  selection.addRange(range);
+  try {
+    const ok = document.execCommand('copy');
+    const btn = document.querySelector('.btn-copy');
+    const originTxt = btn.innerText;
+    btn.innerText = ok ? '✅ 复制成功' : '⚠️ 复制失败';
+    btn.style.background = ok ? '#06ad56' : '#d9480f';
+    setTimeout(() => { btn.innerText = originTxt; btn.style.background = ''; }, 2000);
+  } catch (err) { alert('复制失败：' + err); }
+  document.body.removeChild(clone);
+  selection.removeAllRanges();
+}
+
+// 渲染管线：哨兵初始化 -> 脚注预处理 -> 解析 -> 脚注回填。抽成独立函数，便于回归测试直接调用。
+function renderToHtml(source) {
+  initTokens(source);
+  const fn = preprocessFootnotes(source);
+  return applyFootnotes(marked.parse(fn.md), fn.defs);
+}
+
+// 预览侧行号栏宽度：CSS 计数器画不出动态宽度，逐块把宽度写进 --lnw 变量（未设置时回落到 20px）
+function applyLineNumberGutter(root) {
+  root.querySelectorAll('pre.code-snippet').forEach(pre => {
+    const lines = Array.from(pre.children).filter(el => el.tagName === 'CODE').length;
+    pre.style.setProperty('--lnw', lnGutter(lines).box + 'px');
+  });
+}
+
+function render() {
+  try {
+    const html = renderToHtml(editor.value);
+    if (html.includes(TOK.li) || html.includes(TOK.task) || html.includes(TOK.w)) {
+      console.warn('[md2wx] 列表哨兵未完全消费，可能存在未闭合的列表结构');
+    }
+    output.innerHTML = html;
+    applyLineNumberGutter(output);
+  } catch (e) { console.error(e); }
+}
+editor.addEventListener('input', render);
+editor.value = initialContent;
+window.onload = () => { setTimeout(render, 100); };
+function clearEditor() { if (confirm('清空？')) { editor.value = ''; render(); } }
+</script>
+</body>
+</html>
