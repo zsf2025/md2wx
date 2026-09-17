@@ -63,7 +63,9 @@ const initialContent = __MARKDOWN_JSON__;
 const S = {
   h1: "font-size: 22px; font-weight: bold; border-bottom: 2px solid #07c160; padding-bottom: 10px; margin: 30px 0 20px 0; color: #333;",
   p: "font-size: 16px; margin: 10px 0; line-height: 1.75; color: #333;",
-  list_item: "display: flex; align-items: flex-start; margin-bottom: 8px; line-height: 1.75; color: #333; font-size: 16px;",
+  // 对齐禁用 flex-start/flex-end：公众号编辑器校验规则 #2.6 会把对齐属性中含 start/end
+  // 词素的值标记为"非标准值"（不同终端解析差异）。flex 容器默认 stretch，标记符视觉上同为顶部对齐。
+  list_item: "display: flex; margin-bottom: 8px; line-height: 1.75; color: #333; font-size: 16px;",
   // 标记符宽度不再写死：旧实现固定 15px，"10." 实测 24.09px、"100." 33.53px 都会溢出盒子压到正文
   // （正文左边缘被盖住 5.09px / 14.53px）。宽度改由 list() 按本组最大编号位数注入，见 markerWidth()。
   list_marker: "display: inline-block; margin-right: 4px; font-weight: bold; color: #07c160; white-space: nowrap; text-align: right;",
@@ -167,7 +169,7 @@ function applyFootnotes(html, defs) {
     const d = defs.find(x => x.label === label);
     let text = d ? d.text : '';
     try { text = marked.parseInline(text); } catch (e) { /* 解析失败则保留原文 */ }
-    return `<section style="display: flex; align-items: flex-start; margin-bottom: 6px; font-size: 14px; line-height: 1.7; color: #666;">`
+    return `<section style="display: flex; margin-bottom: 6px; font-size: 14px; line-height: 1.7; color: #666;">`
       + `<span style="display: inline-block; width: ${refWidth}; text-align: right; color: #07c160; font-weight: bold;">${numOf.get(label)}.</span>`
       + `<span style="flex: 1; min-width: 0; word-break: break-all;">${text}</span></section>`;
   }).join('');

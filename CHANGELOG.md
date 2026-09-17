@@ -2,6 +2,14 @@
 
 本文件记录用户可感知的变化。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [1.0.6] - 2026-09-17
+
+### 修复
+- **公众号 text-align 校验告警**：列表项与脚注参考区的 lign-items: flex-start 会被公众号编辑器校验规则 #2.6（对齐属性含 start/end 词素判为非标准值）标记。移除该属性改用 flex 默认 stretch，视觉等价（标记符仍顶部对齐），预览/粘贴两侧同源
+
+### 新增
+- 测试：`test_renderer.js` +1（内联样式零 start/end 对齐词素断言）、SKILL.md 规则表写入硬约束
+
 ## [1.0.5] - 2026-09-17
 
 ### 修复

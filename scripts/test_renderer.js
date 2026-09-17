@@ -89,7 +89,9 @@ const checks = [
   ['列表正文换行策略为 overflow-wrap', html.includes('overflow-wrap: break-word')],
   ['无序列表 marker 为 •', html.includes('>•</span>')],
   ['有序列表编号保留', html.includes('>1.</span>') && html.includes('>2.</span>')],
-  ['列表项 flex 布局', html.includes('display: flex; align-items: flex-start')],
+  ['列表项 flex 布局', /display: flex; margin-bottom: 8px/.test(html)],
+  // 公众号校验规则 #2.6：对齐属性含 start/end 词素的值会被标记为非标准值，内联样式必须零残留
+  ['内联样式无 start/end 对齐词素', !/(?:^|;)\s*(?:text-align|align-items|align-self|align-content|justify-content|justify-items|justify-self)\s*:\s*[^;"]*(?:^|[\s-])(?:start|end)\s*(?:;|$)/.test(html) && !html.includes('flex-start') && !html.includes('flex-end')],
   ['行内代码渲染', html.includes('<code>inline code</code>')],
   ['代码块容器 code-snippet', html.includes('class="code-snippet__js code-snippet code-snippet_nowrap"')],
   ['代码块逐行 <code>', (html.match(/<code><span leaf="">/g) || []).length === 5],
