@@ -1,4 +1,4 @@
-﻿# Changelog
+# Changelog
 
 本文件记录用户可感知的变化。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 

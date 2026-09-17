@@ -1,4 +1,4 @@
-﻿# md2wx — Markdown 转微信公众号富文本
+# md2wx — Markdown 转微信公众号富文本
 
 一个 [WorkBuddy](https://www.workbuddy.cn) 技能（Skill）：把 Markdown 一键转换为微信公众号编辑器可直接粘贴的富文本，保留标题、列表、代码高亮 + 行号、表格、引用、图片、脚注等排版。
 
