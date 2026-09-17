@@ -2,7 +2,7 @@
 name: md2wx
 display_name: Markdown 转公众号排版
 description: 将 Markdown 转换为微信公众号编辑器可直接复制粘贴的富文本内容。当用户要求"转公众号"、"md2wx"、"markdown 转公众号"、"把这篇文章转成公众号格式"、"生成公众号排版"等时使用。支持标题、加粗、斜体、列表（含任务列表勾选态）、代码块（高亮+行号）、引用、表格、图片、分割线、脚注，输出全部使用行内样式，并做标签+属性双重白名单过滤以兼容公众号编辑器。
-version: 1.0.4
+version: 1.0.5
 author: fu914
 license: MIT
 tags: 公众号, markdown, 排版, 富文本, 内容创作
@@ -53,7 +53,7 @@ agent_created: true
 | 代码块 | highlight.js 高亮，类名 `code-snippet__*`，每行独立 `<code><span leaf="">`，DOM 行号（`textContent` 写入），`&nbsp;` 保留缩进 |
 | 代码行号栏 | 宽度按最高行号位数自适应（`lnGutter()`：≤2 位 20px，之后每位 +8px；代码缩进 = 栏宽 + 30px）。预览侧走 `--lnw` CSS 变量 + `calc()`，粘贴侧走内联样式，**两侧必须用同一个函数**，否则预览与发布效果不一致 |
 | 引用 | 浅灰背景 + 左侧 4px 绿色边框 |
-| 表格 | 复制时注入 collapse 边框、th 灰底、单元格左对齐可断行 |
+| 表格 | 复制时注入 collapse 边框、th 灰底、单元格左对齐可断行。**断行规则必须预览/粘贴两侧同源**：粘贴侧 copySafe 注入 `word-break: break-all`，预览侧靠 `.wx-article th, td` CSS——缺预览侧规则时长 URL/无空格长串会把表格撑出容器 |
 | 图片 | max-width 100% + height:auto（只缩不放、等比缩放）、居中、圆角。**必须用公众号素材库图片**（mmbiz.qpic.cn），外链图片粘贴后会被公众号拦截为占位空白，表现为"文本之间出现大块间隔" |
 | 分割线 | 1px 浅灰上边框，上下 24px |
 | 脚注 | `[^x]` 转上标 `[1]`，`[^x]: 内容` 抽取后在文末生成「参考」区（marked 原生会把定义行当引用式链接定义吞掉，必须自行接管） |
@@ -70,7 +70,7 @@ agent_created: true
 
 ```bash
 # 1) 渲染结构（DOM 桩，无额外依赖）
-NODE_PATH="<node_modules 目录>" node scripts/test_renderer.js        # 26 项
+NODE_PATH="<node_modules 目录>" node scripts/test_renderer.js        # 27 项
 
 # 2) 复制阶段白名单 / 代码行号 DOM 化 / 勾选态（需真实 DOM，用 jsdom）
 NODE_PATH="<node_modules 目录>" node scripts/test_copysafe.js        # 27 项

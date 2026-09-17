@@ -2,7 +2,7 @@
 
 一个 [WorkBuddy](https://www.workbuddy.cn) 技能（Skill）：把 Markdown 一键转换为微信公众号编辑器可直接粘贴的富文本，保留标题、列表、代码高亮 + 行号、表格、引用、图片、脚注等排版。
 
-![version](https://img.shields.io/badge/version-1.0.4-green) ![license](https://img.shields.io/badge/license-MIT-blue)
+![version](https://img.shields.io/badge/version-1.0.5-green) ![license](https://img.shields.io/badge/license-MIT-blue)
 
 ## 工作原理
 

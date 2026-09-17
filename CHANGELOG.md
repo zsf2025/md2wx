@@ -2,6 +2,14 @@
 
 本文件记录用户可感知的变化。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [1.0.5] - 2026-09-17
+
+### 修复
+- **表格内容溢出**：预览侧表格单元格缺断行规则，长 URL / 无空格长串的 min-content 宽度把表格撑出容器。补 `.wx-article th, td { word-break: break-all; }`，与粘贴侧 copySafe 注入的规则同源
+
+### 新增
+- 测试：`test_renderer.js` +1（表格断行预览侧同源断言）
+
 ## [1.0.4] - 2026-09-17
 
 ### 修复

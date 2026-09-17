@@ -101,6 +101,9 @@ const checks = [
   ['图片渲染', html.includes('<img')],
   // 图片宽度：无内联 max-width 时，原图超过正文宽度（677px）会横向溢出（预览与粘贴后均是）
   ['图片带内联 max-width:100%', (html.match(/<img [^>]*style="max-width: 100%; height: auto;"/g) || []).length > 0],
+  // 表格断行必须预览/粘贴两侧同源：粘贴侧 copySafe 注入 break-all，预览侧靠这条 CSS。
+  // 缺了预览侧规则时，长 URL/无空格长串的 min-content 宽度会把表格撑出容器（溢出）。
+  ['表格断行预览侧 CSS 同源', tpl.includes('.wx-article th, .wx-article td { word-break: break-all; }')],
   ['分割线渲染', html.includes('<hr>')],
   // 旧断言为 `!html.includes('%%M%%')`，与占位符污染缺陷互为盲区：正文被吞反而更容易通过。
   // 正确做法是断言字面量「原样保留」，同时确认内部哨兵不泄漏。

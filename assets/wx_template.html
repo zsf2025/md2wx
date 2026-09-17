@@ -33,6 +33,8 @@ pre.code-snippet code::before { counter-increment: line; content: counter(line);
 .code-snippet__comment { color: #a0a1a7; font-style: italic; }
 .code-snippet__function, .code-snippet__title { color: #4078f2; }
 .wx-article table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }
+/* 与粘贴侧同源：单元格 break-all 让 min-content 收敛为单字符，长 URL/长串不会把表格撑出容器 */
+.wx-article th, .wx-article td { word-break: break-all; }
 .wx-article img { max-width: 100%; height: auto; }
 .wx-article th, .wx-article td { border: 1px solid #d9d9d9; padding: 8px; }
 .wx-article th { background-color: #f8f8f8; font-weight: bold; }
