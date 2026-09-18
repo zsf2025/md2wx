@@ -2,6 +2,21 @@
 
 本文件记录用户可感知的变化。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [1.0.8] - 2026-09-18
+
+### 变更
+- **三步引导流程**：① 默认只生成预览 HTML（预览阶段不替换图片、不上传素材、不碰发布脚本）② 交付后仅附一句"可自动发布到草稿箱"告知 ③ 用户确认后才发布——直接运行发布脚本（内置凭证/IP 检测），失败才展示配置指引
+- **发布输出极简**：默认只输出单行 JSON（`draft_media_id`/`title`/`uploaded`/`reused`），完整图片清单移到 `--verbose`；发布模式禁止生成预览 HTML（去掉 `--save-html`），减少 token 消耗
+
+## [1.0.7] - 2026-09-18
+
+### 新增
+- **自动发布模式**：图片自动上传公众号素材库 + 文章自动存入草稿箱
+- `scripts/wx_api.js`：access_token 磁盘缓存（提前 5 分钟过期，40001/42001 自动刷新重试）、永久素材上传（`add_material`）、草稿创建（`draft/add`）、常见 errcode 人话映射；CLI 子命令 `check`/`upload`/`draft-count` 用于连通自检。零第三方依赖（Node 18+ 原生 fetch/FormData）
+- `scripts/publish_wx.js`：发布主流程——复用模板渲染管线 + copySafe 白名单清洗（与复制粘贴产物同源）；正文本地/外链图片自动下载上传并替换为 mmbiz 地址；src 级上传缓存（`.wx_upload_cache.json`）防重复上传；封面自动取正文第一张图（或 `--cover` 指定）；标题回退首个 `# ` 一级标题；`--dry-run` 试跑
+- SKILL.md 新增「自动发布模式」章节：AppID/AppSecret 获取步骤、IP 白名单配置（errcode 40164 最常见失败点）、凭证两种写入方式、错误码速查表
+- 测试数据：`testdata/publish_sample.md` + `publish_img.png`
+
 ## [1.0.6] - 2026-09-17
 
 ### 修复

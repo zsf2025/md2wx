@@ -12,6 +12,11 @@ __pycache__/
 dist/
 *.wx.html
 
+# 公众号凭证与运行时缓存（绝不能提交）
+wx_config.json
+.wx_token_cache.json
+.wx_upload_cache.json
+
 # 系统文件
 .DS_Store
 Thumbs.db
